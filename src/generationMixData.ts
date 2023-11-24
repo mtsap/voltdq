@@ -15,24 +15,24 @@ const Fuel = z.enum([
   "solar",
 ]);
 
-type Mix = {
+export type Fuel = z.infer<typeof Fuel>;
+
+type PercentageMix = Array<{
   from: Date;
   to: Date;
-  generationmix: {
+  generationmix: Array<{
     perc: number;
     fuel: Fuel;
-  }[];
-}[];
-
-export type Fuel = z.infer<typeof Fuel>;
+  }>;
+}>;
 
 export type ConsumptionMix = {
   from: Date;
   to: Date;
-  generationmix: {
+  generationmix: Array<{
     consumption: number;
-    fuel: string;
-  }[];
+    fuel: Fuel;
+  }>;
 };
 
 const Generation = z.object({
@@ -77,7 +77,7 @@ function calculateMix(
     consumption: number;
     start_interval: Date;
   }>,
-  mix: Mix,
+  mix: PercentageMix,
 ) {
   if (consumption.length !== mix.length) {
     throw new Error("Data length missmatch");
@@ -86,7 +86,9 @@ function calculateMix(
     throw new Error("Data time intervals missmatch");
   }
 
-  const a = zipWith(
+  // zip consumption and mix data and make a new array out of them
+  // each object in the array has the consumption and the mix for a 30min interval
+  const zipped = zipWith(
     (consumption, mix) => {
       return mix.generationmix.map((obj) => ({
         ...obj,
@@ -96,7 +98,10 @@ function calculateMix(
     consumption,
     mix,
   );
-  const totalConsumptionPerFuel = a.reduce(
+
+  // fuel order is always the same so we can use zip again to sum
+  // the corresponding fuel values
+  const totalConsumptionPerFuel = zipped.reduce(
     (acc, curr) => {
       return R.zipWith(
         (a, b) => ({
@@ -108,15 +113,15 @@ function calculateMix(
       );
     },
     [
-      { fuel: "biomass", consumption: 0 },
-      { fuel: "coal", consumption: 0 },
-      { fuel: "imports", consumption: 0 },
-      { fuel: "gas", consumption: 0 },
-      { fuel: "nuclear", consumption: 0 },
-      { fuel: "other", consumption: 0 },
-      { fuel: "hydro", consumption: 0 },
-      { fuel: "solar", consumption: 0 },
-      { fuel: "wind", consumption: 0 },
+      { fuel: "biomass" as Fuel, consumption: 0 },
+      { fuel: "coal" as Fuel, consumption: 0 },
+      { fuel: "imports" as Fuel, consumption: 0 },
+      { fuel: "gas" as Fuel, consumption: 0 },
+      { fuel: "nuclear" as Fuel, consumption: 0 },
+      { fuel: "other" as Fuel, consumption: 0 },
+      { fuel: "hydro" as Fuel, consumption: 0 },
+      { fuel: "solar" as Fuel, consumption: 0 },
+      { fuel: "wind" as Fuel, consumption: 0 },
     ],
   );
   return totalConsumptionPerFuel;
@@ -137,13 +142,15 @@ function calculateConsumptionMix(
     generationmix: obj.generationmix,
   }));
 
-  const result = {
-    from: mix[0].from,
-    to: mix[mix.length - 1].to,
-    generationmix: calculateMix(consumption, mix),
-  };
-
-  return result;
+  try {
+    return {
+      from: mix[0].from,
+      to: mix[mix.length - 1].to,
+      generationmix: calculateMix(consumption, mix),
+    };
+  } catch (e) {
+    throw e;
+  }
 }
 
 export { fetchGenerationMixData, calculateConsumptionMix };
